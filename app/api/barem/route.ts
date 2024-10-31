@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
     if (!file || !(file instanceof Blob)) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
-    //@ts-expect-error
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const base64Image = buffer.toString("base64");
