@@ -3,36 +3,45 @@ interface HttpRequestOptions {
 }
 
 interface ApiResponse<T = unknown> {
-  ok: any;
-  json(): unknown;
+  ok: boolean;
+  json(): Promise<unknown>;
   data?: T;
   error?: string;
   status: number;
 }
+
 type RequestBody = Record<string, unknown> | FormData;
+
 const handleResponse = async <T>(
   response: Response
 ): Promise<ApiResponse<T>> => {
   try {
     if (response.status === 204) {
-      return { status: response.status };
+      return {
+        ok: response.ok,
+        json: () => Promise.resolve({}),
+        status: response.status,
+      };
     }
-
     const data = await response.json();
-
     if (!response.ok) {
       return {
+        ok: response.ok,
+        json: () => Promise.resolve(data),
         error: data.message || "Bir hata oluştu",
         status: response.status,
       };
     }
-
     return {
+      ok: response.ok,
+      json: () => Promise.resolve(data),
       data,
       status: response.status,
     };
   } catch (error) {
     return {
+      ok: false,
+      json: () => Promise.resolve({}),
       error: "İstek işlenirken bir hata oluştu",
       status: response.status,
     };
@@ -50,6 +59,8 @@ const get = async <T>(
     return handleResponse<T>(response);
   } catch (error) {
     return {
+      ok: false,
+      json: () => Promise.resolve({}),
       error: "Bağlantı hatası",
       status: 500,
     };
@@ -63,11 +74,9 @@ const post = async <T>(
 ): Promise<ApiResponse<T>> => {
   try {
     const isFormData = data instanceof FormData;
-
     const headers = isFormData
       ? { ...options?.headers }
       : { ...getHeaders(), ...options?.headers };
-
     const response = await fetch(getUrl(url), {
       method: "POST",
       headers,
@@ -76,6 +85,8 @@ const post = async <T>(
     return handleResponse<T>(response);
   } catch (error) {
     return {
+      ok: false,
+      json: () => Promise.resolve({}),
       error: "Bağlantı hatası",
       status: 500,
     };
@@ -89,11 +100,9 @@ const put = async <T>(
 ): Promise<ApiResponse<T>> => {
   try {
     const isFormData = data instanceof FormData;
-
     const headers = isFormData
       ? { ...options?.headers }
       : { ...getHeaders(), ...options?.headers };
-
     const response = await fetch(getUrl(url), {
       method: "PUT",
       headers,
@@ -102,6 +111,8 @@ const put = async <T>(
     return handleResponse<T>(response);
   } catch (error) {
     return {
+      ok: false,
+      json: () => Promise.resolve({}),
       error: "Bağlantı hatası",
       status: 500,
     };
@@ -120,6 +131,8 @@ const deleteRequest = async <T>(
     return handleResponse<T>(response);
   } catch (error) {
     return {
+      ok: false,
+      json: () => Promise.resolve({}),
       error: "Bağlantı hatası",
       status: 500,
     };
