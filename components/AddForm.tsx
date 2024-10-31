@@ -37,86 +37,88 @@ interface DetectionResult {
 
 const AddForm = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<DetectionResult | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [result, setResult] = useState(null);
+  const canvasRef = useRef(null);
+  const imageRef = useRef(null);
+  const drawDetections = (base64Image, predictions) => {
+    return new Promise<void>((resolve, reject) => {
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        reject("Canvas not found");
+        return;
+      }
 
-  const drawDetections = (base64Image: string, predictions: Prediction[]) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject("Context not found");
+        return;
+      }
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+      const cleanBase64 = base64Image.replace(
+        /^data:image\/(png|jpeg|jpg);base64,/,
+        ""
+      );
 
-    // Base64'ü temizle (data:image/jpeg;base64, kısmını kaldır)
-    const cleanBase64 = base64Image.replace(
-      /^data:image\/(png|jpeg|jpg);base64,/,
-      ""
-    );
+      const image = new Image();
+      image.src = `data:image/jpeg;base64,${cleanBase64}`;
+      imageRef.current = image;
 
-    const image = new Image();
-    // Base64'ü URL formatına çevir
-    image.src = `data:image/jpeg;base64,${cleanBase64}`;
+      image.onload = () => {
+        // Canvas'ı görüntü boyutuna ayarla
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
 
-    // Debug
-    console.log("Image source:", image.src.substring(0, 100) + "...");
+        // Görüntüyü çiz
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0);
 
-    image.onload = () => {
-      console.log("Image loaded:", image.width, "x", image.height);
+        // Tahminleri çiz
+        predictions.forEach((pred, index) => {
+          const x = pred.x - pred.width / 2;
+          const y = pred.y - pred.height / 2;
 
-      // Canvas boyutunu ayarla
-      canvas.width = image.naturalWidth || image.width;
-      canvas.height = image.naturalHeight || image.height;
+          // Dikdörtgen
+          ctx.strokeStyle = "blue";
+          ctx.lineWidth = 5;
+          ctx.strokeRect(x, y, pred.width, pred.height);
 
-      // Arkaplanı temizle
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Görüntüyü çiz
-      ctx.drawImage(image, 0, 0);
-
-      // Debug
-      console.log("Drawing predictions:", predictions.length);
-
-      // Tahminleri çiz
-      predictions.forEach((pred, index) => {
-        // Dikdörtgen çiz
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 3;
-
-        const x = pred.x - pred.width / 2;
-        const y = pred.y - pred.height / 2;
-
-        ctx.strokeRect(x, y, pred.width, pred.height);
-
-        // Numarayı yaz
-        ctx.fillStyle = "red";
-        ctx.font = "bold 24px Arial";
-        ctx.fillText(`#${index + 1}`, x, y - 5);
-
-        // Debug
-        console.log(`Drawing box ${index + 1}:`, {
-          x,
-          y,
-          width: pred.width,
-          height: pred.height,
+          // Numara
+          ctx.fillStyle = "red";
+          ctx.font = "bold 24px Arial";
+          ctx.fillText(`#${index + 1}`, x, y - 5);
         });
-      });
-    };
 
-    image.onerror = (err) => {
-      console.error("Görüntü yüklenirken hata oluştu:", err);
-      console.error("Image source length:", image.src.length);
-      // Base64'ün geçerli olup olmadığını kontrol et
-      try {
-        atob(cleanBase64);
-        console.log("Base64 is valid");
-      } catch (e) {
-        console.error("Invalid base64:", e);
+        resolve();
+      };
+
+      image.onerror = (err) => {
+        reject(`Image loading error: ${err}`);
+      };
+    });
+  };
+  useEffect(() => {
+    if (result?.data?.image && result?.data?.predictions) {
+      drawDetections(result.data.image, result.data.predictions).catch(
+        console.error
+      );
+    }
+  }, [result]);
+
+  // Window resize olduğunda yeniden çiz
+  useEffect(() => {
+    const handleResize = () => {
+      if (result?.data?.image && result?.data?.predictions) {
+        drawDetections(result.data.image, result.data.predictions).catch(
+          console.error
+        );
       }
     };
-  };
 
-  const handleSubmit = async (values: FormValues) => {
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [result]);
+
+  const handleSubmit = async (values) => {
     try {
       setIsLoading(true);
       const formData = new FormData();
@@ -126,24 +128,8 @@ const AddForm = () => {
       }
       formData.append("weight", values.weight.toString());
 
-      const response = (await fetchWrapper.post(
-        "/barem",
-        formData
-      )) as DetectionResult;
+      const response = await fetchWrapper.post("/barem", formData);
       setResult(response);
-
-      if (response.data.image) {
-        console.log("Response received with image data");
-        // API yanıtını kontrol et
-        console.log("Response data:", {
-          imageLength: response.data.image.length,
-          predictionsCount: response.data.predictions.length,
-        });
-
-        drawDetections(response.data.image, response.data.predictions);
-      } else {
-        console.error("No image data in response");
-      }
     } catch (error) {
       console.error("API Error:", error);
       alert("Bir hata oluştu!");
@@ -151,7 +137,6 @@ const AddForm = () => {
       setIsLoading(false);
     }
   };
-
   const form = useForm<FormValues>({
     initialValues: {
       file: null,
@@ -226,6 +211,7 @@ const AddForm = () => {
                   maxWidth: "100%",
                   height: "auto",
                   border: "1px solid #ccc",
+                  backgroundColor: "#fff",
                 }}
               />
             </div>
