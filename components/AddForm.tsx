@@ -126,13 +126,13 @@ const AddForm = () => {
       }
       formData.append("weight", values.weight.toString());
 
-      const response = await fetchWrapper.post<DetectionResult>(
+      const response = (await fetchWrapper.post(
         "/barem",
         formData
-      );
+      )) as DetectionResult;
       setResult(response);
 
-      if (response.data?.image) {
+      if (response.data.image) {
         console.log("Response received with image data");
         // API yanıtını kontrol et
         console.log("Response data:", {
@@ -208,9 +208,10 @@ const AddForm = () => {
                 Tespit Edilen Zeytin Sayısı: {result.data.predictions.length}
               </Text>
               <Text color="red">
-                Barem:
-                {(1000 * result.data.predictions.length) / form.values.weight}
-                {"Tane"}
+                Barem:{" "}
+                {Math.ceil(
+                  (1000 * result.data.predictions.length) / form.values.weight
+                ) / 10}
               </Text>
               <Text size="sm" color="gray">
                 İşlem Süresi: {result.data.time.toFixed(3)} saniye
